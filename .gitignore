@@ -1,0 +1,18 @@
+# Secrets - never commit these
+.env
+
+# Virtual environment
+venv/
+
+# Python junk
+__pycache__/
+*.pyc
+
+# JARVIS local data
+data/*.db
+data/chroma/
+logs/
+screenshots/
+notes/
+
+knowledge/
