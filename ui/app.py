@@ -106,6 +106,7 @@ class JarvisApp:
         self.chat = self._make_text(body, 1, 0, (0, 0))
         self.chat.tag_config("user", foreground=TEXT)
         self.chat.tag_config("jarvis", foreground=CYAN)
+        self.chat.tag_config("dim", foreground=DIM)
         self.activity = self._make_text(body, 1, 1, (10, 0))
         self.activity.config(font=("Consolas", 9))
 
@@ -316,6 +317,9 @@ class JarvisApp:
                     self.system_label.config(text=f"{DOT} SYSTEM ONLINE", fg=GREEN)
                     self._end_work()
                     self._append(self.chat, "JARVIS: At your service, Sir.", "jarvis")
+                    restored = getattr(self.orchestrator, "restored_turns", 0)
+                    if restored:
+                        self._append(self.chat, f"({restored} earlier messages restored from the last session)", "dim")
                 elif kind == "user_text":
                     self._append(self.chat, f"YOU (voice): {event[1]}", "user")
                 elif kind == "reply":
@@ -355,5 +359,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 

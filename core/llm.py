@@ -14,7 +14,7 @@ class JarvisLLM:
     """The cloud 'brain'. Keeps chat history, can request tools, and switches
     to a backup model if the current one is busy or unavailable."""
 
-    def __init__(self, tools=None):
+    def __init__(self, tools=None, history=None):
         if not config.GEMINI_API_KEY or config.GEMINI_API_KEY == "your_key_here":
             raise ValueError("No real GEMINI_API_KEY found in .env")
         self.client = genai.Client(api_key=config.GEMINI_API_KEY)
@@ -22,7 +22,11 @@ class JarvisLLM:
         backups = [name for name in config.GEMINI_FALLBACK_MODELS if name != config.GEMINI_MODEL]
         self.models = [config.GEMINI_MODEL] + backups
         self.model_index = 0
-        self.chat = self._new_chat()
+        try:
+            self.chat = self._new_chat(history or None)
+        except Exception as error:
+            logger.warning("[LLM] Could not restore history: %s", error)
+            self.chat = self._new_chat()
 
     @property
     def model_name(self) -> str:
@@ -38,6 +42,10 @@ class JarvisLLM:
         return self.client.chats.create(
             model=self.model_name, config=chat_config, history=history
         )
+
+    def reset_chat(self) -> None:
+        """Start a completely fresh conversation."""
+        self.chat = self._new_chat()
 
     def _switch_model(self) -> bool:
         """Move to the next backup model, keeping the conversation. False if none are left."""
