@@ -8,6 +8,7 @@ from tools.filesystem import create_note, open_folder, read_text_file, search_fi
 from memory.memory_manager import describe_forget, forget_memory, recall_memories, remember_fact
 from rag.retriever import read_knowledge_document, reindex_documents, search_documents
 from tools.screenshot import take_screenshot
+from tools.site_search import search_on_site
 from tools.vision import analyze_screen
 from tools.system import get_current_datetime, get_system_info
 from tools.weather import get_weather
@@ -19,6 +20,7 @@ logger = logging.getLogger("jarvis")
 _TOOLS = {
     "calculate": (calculate, 1),
     "open_website": (open_website, 1),
+    "search_on_site": (search_on_site, 1),
     "open_application": (open_application, 1),
     "get_system_info": (get_system_info, 1),
     "get_current_datetime": (get_current_datetime, 1),
@@ -87,6 +89,7 @@ def run_tool(name: str, args: dict, confirm=None) -> str:
     except Exception as error:
         logger.error("[TOOL] %s failed: %s", name, error)
         return f"Error: the tool failed ({error})."
+
 
 
 
