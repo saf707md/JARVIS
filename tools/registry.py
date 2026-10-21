@@ -8,6 +8,7 @@ from tools.filesystem import create_note, open_folder, read_text_file, search_fi
 from memory.memory_manager import describe_forget, forget_memory, recall_memories, remember_fact
 from rag.retriever import read_knowledge_document, reindex_documents, search_documents
 from tools.screenshot import take_screenshot
+from tools.vision import analyze_screen
 from tools.system import get_current_datetime, get_system_info
 from tools.weather import get_weather
 from tools.web_search import news_search, web_search
@@ -33,6 +34,7 @@ _TOOLS = {
     "remember_fact": (remember_fact, 1),
     "recall_memories": (recall_memories, 1),
     "take_screenshot": (take_screenshot, 1),
+    "analyze_screen": (analyze_screen, 2),
     "forget_memory": (forget_memory, 2),
     "create_note": (create_note, 2),  # Level 2: needs confirmation
 }
@@ -40,6 +42,7 @@ _TOOLS = {
 # How to describe Level 2 actions to the user when asking permission
 _DESCRIPTIONS = {
     "forget_memory": lambda a: describe_forget(a.get('keyword', '')),
+    "analyze_screen": lambda a: f"take a screenshot of your screen and send it to Google Gemini to answer: '{a.get('question', '')}' (after you click Yes, you will have 4 seconds to bring the window you want me to see to the front)",
     "create_note": lambda a: f"create a note called '{a.get('filename', 'untitled')}'",
 }
 
@@ -84,6 +87,7 @@ def run_tool(name: str, args: dict, confirm=None) -> str:
     except Exception as error:
         logger.error("[TOOL] %s failed: %s", name, error)
         return f"Error: the tool failed ({error})."
+
 
 
 
