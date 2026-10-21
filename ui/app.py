@@ -7,6 +7,11 @@ from tkinter import messagebox
 
 DOT = "\u25cf"
 
+EXIT_WORDS = (
+    "exit", "quit", "bye", "goodbye", "goodbye jarvis", "bye jarvis",
+    "exit jarvis", "quit jarvis", "close", "close jarvis", "shut down", "shut down jarvis",
+)
+
 BG = "#0a1018"
 PANEL = "#101a26"
 CYAN = "#4dd0ff"
@@ -252,7 +257,14 @@ class JarvisApp:
         self._process(text)
 
     # ---------- shared processing ----------
+    def _is_exit(self, text):
+        cleaned = re.sub(r"[^a-z ]", "", text.lower()).strip()
+        return cleaned in EXIT_WORDS
+
     def _process(self, text):
+        if self._is_exit(text):
+            self._respond("Goodbye, Sir.", quit_after=True)
+            return
         self.events.put(("state", "THINKING...", AMBER))
         try:
             reply = self.orchestrator.ask(text)
@@ -261,12 +273,15 @@ class JarvisApp:
             reply = "Sir, something went wrong while processing that request."
         self._respond(reply)
 
-    def _respond(self, reply):
+    def _respond(self, reply, quit_after=False):
         self.events.put(("reply", reply))
         if self.voice_enabled:
             self.events.put(("state", "SPEAKING...", CYAN))
             self._speak(reply)
-        self.events.put(("done",))
+        if quit_after:
+            self.events.put(("quit",))
+        else:
+            self.events.put(("done",))
 
     def _speak(self, text):
         try:
@@ -305,6 +320,9 @@ class JarvisApp:
                     self._append(self.chat, f"YOU (voice): {event[1]}", "user")
                 elif kind == "reply":
                     self._append(self.chat, f"JARVIS: {event[1]}", "jarvis")
+                elif kind == "quit":
+                    self.root.destroy()
+                    return
                 elif kind == "done":
                     self._end_work()
                 elif kind == "confirm":
@@ -337,4 +355,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
