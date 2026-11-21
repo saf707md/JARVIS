@@ -1,8 +1,9 @@
-﻿import logging
+import logging
 import re
 
 from google.genai import types
 
+from core import actions
 from core.llm import JarvisLLM
 from memory.conversation import clear_history, load_recent, save_exchange
 from tools.registry import get_tool_functions, run_tool
@@ -10,7 +11,7 @@ from tools.registry import get_tool_functions, run_tool
 logger = logging.getLogger("jarvis")
 
 FALLBACK = "Sir, I couldn't reach my cloud brain right now."
-MAX_TOOL_ROUNDS = 5  # safety limit so the AI can't loop forever
+MAX_TOOL_ROUNDS = 8  # safety limit so the AI can't loop forever
 CLEAR_PHRASES = {
     "clear history", "clear chat history", "clear conversation history",
     "clear my chat history", "delete chat history", "forget our conversation",
@@ -36,6 +37,7 @@ class Orchestrator:
         if re.sub(r"[^a-z ]", "", user_text.lower()).strip() in CLEAR_PHRASES:
             return self._clear_history()
 
+        actions.new_batch()  # everything done for this request can be undone together
         response = self.llm.send(user_text)
 
         for _ in range(MAX_TOOL_ROUNDS):
