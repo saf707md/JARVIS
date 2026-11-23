@@ -1,4 +1,4 @@
-﻿import logging
+import logging
 import queue
 import re
 import threading
@@ -31,7 +31,12 @@ LOG_COLORS = {
     "[TTS]": DIM,
     "[STT]": DIM,
     "[VOICE]": DIM,
+    "[ROUTINE]": GREEN,
+    "[UNDO]": AMBER,
+    "[SUGGEST]": "#c792ea",
 }
+
+SUGGEST_EVERY_MS = 20 * 60 * 1000  # look for new habits every 20 minutes
 
 
 class QueueHandler(logging.Handler):
@@ -53,12 +58,14 @@ class JarvisApp:
         self.busy = False
         self.voice_enabled = True
         self.indicators = {}
+        self.offered = set()  # suggestions already shown this session
 
         self._build_ui()
         self._setup_logging()
         self._begin_work()
         self._set_state("STARTING...", AMBER)
         self.root.after(100, self._poll_events)
+        self.root.after(SUGGEST_EVERY_MS, self._suggest_tick)
         threading.Thread(target=self._startup, daemon=True).start()
 
     # ---------- building the window ----------
@@ -225,6 +232,39 @@ class JarvisApp:
         self.events.put(("ready",))
         if self.orchestrator is not None and self.voice_enabled:
             self._speak("J.A.R.V.I.S online. At your service, Sir.")
+        self._check_suggestions()
+
+    # ---------- proactive routine suggestions ----------
+    def _check_suggestions(self):
+        """Runs in a background thread. Offers at most one suggestion per check."""
+        try:
+            from core.suggestions import describe, find_suggestion
+            suggestion = find_suggestion()
+        except Exception as error:
+            logging.getLogger("jarvis").error("[SUGGEST] Error: %s", error)
+            suggestion = None
+        if suggestion and suggestion["key"] not in self.offered:
+            self.offered.add(suggestion["key"])
+            logging.getLogger("jarvis").info("[SUGGEST] Habit found: %s", "; ".join(suggestion["steps"]))
+            self.events.put(("suggest", suggestion, describe(suggestion)))
+
+    def _suggest_tick(self):
+        """Runs in the window thread every 20 minutes (Tkinter timers must live here)."""
+        threading.Thread(target=self._check_suggestions, daemon=True).start()
+        self.root.after(SUGGEST_EVERY_MS, self._suggest_tick)
+
+    def _handle_suggestion(self, suggestion, text):
+        from core.suggestions import accept, dismiss
+        self._append(self.chat, f"JARVIS: {text}", "jarvis")
+        if self.voice_enabled and not self.busy:
+            threading.Thread(target=self._speak, args=(text,), daemon=True).start()
+        if messagebox.askyesno("J.A.R.V.I.S - Suggestion", f"Sir, {text}"):
+            result = accept(suggestion)
+            name = suggestion["name"]
+            self._append(self.chat, f"JARVIS: Done. Say \"start {name} routine\" any time. ({result})", "jarvis")
+        else:
+            dismiss(suggestion)
+            self._append(self.chat, "JARVIS: Understood, I won't suggest that again.", "jarvis")
 
     # ---------- typed messages ----------
     def _send(self):
@@ -329,6 +369,8 @@ class JarvisApp:
                     return
                 elif kind == "done":
                     self._end_work()
+                elif kind == "suggest":
+                    self._handle_suggestion(event[1], event[2])
                 elif kind == "confirm":
                     _, description, result, done = event
                     result["ok"] = messagebox.askyesno(
