@@ -13,6 +13,8 @@ No GPU is needed: the language model runs in the cloud (Google Gemini free tier)
 - RAG over your own PDF, PPTX, DOCX, TXT and MD files (ChromaDB, local embeddings)
 - Web and news search, weather, calculator, system information
 - Safe computer actions: open approved apps and websites, find and read files, screenshots
+- Hotkey text actions: select text in any app, press Ctrl+Shift+J, then summarise, explain,
+  translate, draft a reply or save it to memory
 - Three-level security model with confirmation prompts
 - Dark desktop interface with status lights and a live activity panel
 
@@ -48,6 +50,8 @@ blocked sensitive file names (.env, password, secret...), calculator without eva
    JARVIS_VOICE=en-GB-RyanNeural   (other voices: en-IN-PrabhatNeural, en-US-GuyNeural, en-GB-SoniaNeural)
    JARVIS_VOICE_RATE=+5%
    JARVIS_WAKE_WORD=on             ("Hey JARVIS"; off = SPEAK button only)
+   JARVIS_HOTKEY=ctrl+shift+j      (text actions on selected text, in any app)
+   JARVIS_TRANSLATE_TO=English     (language for the Translate action)
    JARVIS_WAKE_THRESHOLD=0.5       (raise to 0.6-0.7 if it wakes by mistake, lower to 0.3-0.4 if it misses you)
 4. Put documents in knowledge\ (any sub-folders), then run: python -m rag.ingest
 5. Check everything: python health_check.py
