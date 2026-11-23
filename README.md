@@ -47,6 +47,8 @@ blocked sensitive file names (.env, password, secret...), calculator without eva
    JARVIS_TTS=edge                 (natural voice, needs internet; "offline" = built-in Windows voice)
    JARVIS_VOICE=en-GB-RyanNeural   (other voices: en-IN-PrabhatNeural, en-US-GuyNeural, en-GB-SoniaNeural)
    JARVIS_VOICE_RATE=+5%
+   JARVIS_WAKE_WORD=on             ("Hey JARVIS"; off = SPEAK button only)
+   JARVIS_WAKE_THRESHOLD=0.5       (raise to 0.6-0.7 if it wakes by mistake, lower to 0.3-0.4 if it misses you)
 4. Put documents in knowledge\ (any sub-folders), then run: python -m rag.ingest
 5. Check everything: python health_check.py
 6. Start JARVIS: double-click start_jarvis.bat (or: python -m ui.app)
@@ -70,9 +72,8 @@ knowledge/  your documents      notes/  notes JARVIS creates      logs/  jarvis.
 - Speech recognition uses Google's free web service, so audio is sent to Google.
 - Web search uses unofficial free search libraries and can occasionally return nothing.
 - Scanned (image-only) PDFs cannot be read yet.
-- Push-to-talk only: no wake word yet.
 - Text sent to Gemini on the free tier may be used by Google to improve its products.
 
 ## Future scope
-Wake-word detection, vision and camera input, calendar and email, smart-home control,
+Vision and camera input, calendar and email, smart-home control,
 mobile app, multiple specialised agents, better voices.

@@ -62,6 +62,7 @@ class JarvisApp:
         self.voice_enabled = True
         self.indicators = {}
         self.offered = set()  # suggestions already shown this session
+        self.wake = None       # "Hey JARVIS" listener, if available
 
         self._build_ui()
         self._setup_logging()
@@ -140,6 +141,11 @@ class JarvisApp:
                        command=self._toggle_voice, font=("Consolas", 10), fg=TEXT, bg=BG,
                        selectcolor=PANEL, activebackground=BG,
                        activeforeground=TEXT).pack(side="left", padx=(12, 0))
+        self.wake_var = tk.BooleanVar(value=True)
+        tk.Checkbutton(entry_row, text="Hey JARVIS", variable=self.wake_var,
+                       command=self._toggle_wake, font=("Consolas", 10), fg=TEXT, bg=BG,
+                       selectcolor=PANEL, activebackground=BG,
+                       activeforeground=TEXT).pack(side="left", padx=(8, 0))
         self.entry.focus_set()
 
     def _make_text(self, parent, row, column, padx):
@@ -165,14 +171,31 @@ class JarvisApp:
     def _set_state(self, text, color):
         self.state_label.config(text=text, fg=color)
 
+    def _toggle_wake(self):
+        if self.wake is None:
+            return
+        if self.wake_var.get() and not self.busy:
+            self.wake.resume()
+        else:
+            self.wake.pause()
+
+    def _wake_ready(self):
+        return self.wake is not None and self.wake_var.get()
+
     def _begin_work(self):
         self.busy = True
+        if self.wake is not None:
+            self.wake.pause()  # free the microphone and never wake on our own voice
         self.send_button.config(state="disabled")
         self.mic_button.config(state="disabled")
 
     def _end_work(self):
         self.busy = False
-        self._set_state("READY", GREEN)
+        if self._wake_ready():
+            self.wake.resume()
+            self._set_state("READY - say \"Hey JARVIS\"", GREEN)
+        else:
+            self._set_state("READY", GREEN)
         self.send_button.config(state="normal")
         self.mic_button.config(state="normal")
 
@@ -228,15 +251,58 @@ class JarvisApp:
         try:
             import pyttsx3  # noqa: F401
             import speech_recognition  # noqa: F401
-            self.events.put(("status", "VOICE", "ONLINE", GREEN))
+            voice_ok = True
         except Exception as error:
+            voice_ok = False
             self.events.put(("status", "VOICE", "OFFLINE", RED))
             log.error("[VOICE] Voice libraries missing: %s", error)
 
-        self.events.put(("ready",))
+        if voice_ok:
+            self.events.put(("status", "VOICE", self._start_wake_word(log), GREEN))
+
+        # Greet before going idle, so the wake word never hears our own voice
         if self.orchestrator is not None and self.voice_enabled:
             self._speak("J.A.R.V.I.S online. At your service, Sir.")
+        self.events.put(("ready",))
         self._check_suggestions()
+
+    # ---------- wake word ----------
+    def _start_wake_word(self, log):
+        """Returns the text for the VOICE status light."""
+        try:
+            from voice import wake_word
+            if not wake_word.enabled():
+                return "ONLINE (wake word off)"
+            listener = wake_word.WakeWordListener(on_wake=lambda: self.events.put(("wake",)))
+            listener.pause()      # stays paused until JARVIS is idle
+            listener.start()
+            self.wake = listener
+            return "ONLINE (Hey JARVIS)"
+        except Exception as error:
+            log.warning("[VOICE] Wake word unavailable, use the SPEAK button: %s", error)
+            return "ONLINE (push-to-talk)"
+
+    def _on_wake(self):
+        """Window thread: "Hey JARVIS" was heard."""
+        if self.busy or self.orchestrator is None or not self._wake_ready():
+            return
+        try:
+            import winsound
+            winsound.MessageBeep(winsound.MB_OK)  # short chime: "I'm listening"
+        except Exception:
+            pass
+        self._listen_clicked()
+
+    def _speak_aside(self, text):
+        """Speak something JARVIS starts by itself (reminders, suggestions) without waking itself."""
+        paused_here = self.wake is not None and not self.busy
+        if paused_here:
+            self.wake.pause()
+        try:
+            self._speak(text)
+        finally:
+            if paused_here and not self.busy and self._wake_ready():
+                self.wake.resume()
 
     # ---------- reminders ----------
     def _reminder_tick(self):
@@ -262,7 +328,7 @@ class JarvisApp:
         notify("J.A.R.V.I.S reminder", message)
         self._append(self.chat, f"JARVIS: Sir, {message[0].lower() + message[1:]}", "jarvis")
         if self.voice_enabled:
-            threading.Thread(target=self._speak, args=(f"Sir, {message}",), daemon=True).start()
+            threading.Thread(target=self._speak_aside, args=(f"Sir, {message}",), daemon=True).start()
 
     # ---------- proactive routine suggestions ----------
     def _check_suggestions(self):
@@ -287,7 +353,7 @@ class JarvisApp:
         from core.suggestions import accept, dismiss
         self._append(self.chat, f"JARVIS: {text}", "jarvis")
         if self.voice_enabled and not self.busy:
-            threading.Thread(target=self._speak, args=(text,), daemon=True).start()
+            threading.Thread(target=self._speak_aside, args=(text,), daemon=True).start()
         if messagebox.askyesno("J.A.R.V.I.S - Suggestion", f"Sir, {text}"):
             result = accept(suggestion)
             name = suggestion["name"]
@@ -395,10 +461,14 @@ class JarvisApp:
                 elif kind == "reply":
                     self._append(self.chat, f"JARVIS: {event[1]}", "jarvis")
                 elif kind == "quit":
+                    if self.wake is not None:
+                        self.wake.stop()
                     self.root.destroy()
                     return
                 elif kind == "done":
                     self._end_work()
+                elif kind == "wake":
+                    self._on_wake()
                 elif kind == "reminder":
                     self._announce_reminder(event[1])
                 elif kind == "suggest":
