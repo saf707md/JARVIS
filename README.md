@@ -1,4 +1,4 @@
-﻿# J.A.R.V.I.S - Just A Rather Very Intelligent System
+# J.A.R.V.I.S - Just A Rather Very Intelligent System
 
 A cloud-based personal AI assistant for Windows. JARVIS understands typed or spoken requests,
 decides which approved tool to use, searches the web and your own documents, remembers facts
@@ -7,7 +7,7 @@ between sessions, and controls the computer through a safe permission system.
 No GPU is needed: the language model runs in the cloud (Google Gemini free tier).
 
 ## Features
-- Voice conversation (speech-to-text and text-to-speech)
+- Voice conversation (speech-to-text and a natural neural voice, with the built-in Windows voice as fallback)
 - Cloud LLM brain with tool calling (agent behaviour, multi-step)
 - Persistent memory in SQLite
 - RAG over your own PDF, PPTX, DOCX, TXT and MD files (ChromaDB, local embeddings)
@@ -43,6 +43,10 @@ blocked sensitive file names (.env, password, secret...), calculator without eva
 3. Create a .env file (never commit it):
    GEMINI_API_KEY=your_key_here
    GEMINI_MODEL=gemini-3.5-flash-lite
+   Optional voice settings:
+   JARVIS_TTS=edge                 (natural voice, needs internet; "offline" = built-in Windows voice)
+   JARVIS_VOICE=en-GB-RyanNeural   (other voices: en-IN-PrabhatNeural, en-US-GuyNeural, en-GB-SoniaNeural)
+   JARVIS_VOICE_RATE=+5%
 4. Put documents in knowledge\ (any sub-folders), then run: python -m rag.ingest
 5. Check everything: python health_check.py
 6. Start JARVIS: double-click start_jarvis.bat (or: python -m ui.app)
