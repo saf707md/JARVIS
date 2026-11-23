@@ -181,7 +181,8 @@ class JarvisApp:
         self.chat = ctk.CTkScrollableFrame(main, fg_color=PANEL, corner_radius=16)
         self.chat.grid(row=1, column=0, sticky="nsew", padx=22, pady=6)
         self.chat.grid_columnconfigure(0, weight=1)
-        self.chat.bind("<Configure>", lambda event: self._rewrap())
+        # add="+" keeps CustomTkinter's own handler, which updates the scroll area
+        self.chat._parent_canvas.bind("<Configure>", lambda event: self._rewrap(), add="+")
 
         bar = ctk.CTkFrame(main, fg_color=PANEL, corner_radius=16)
         bar.grid(row=2, column=0, sticky="ew", padx=22, pady=(8, 20))
