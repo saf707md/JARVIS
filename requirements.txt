@@ -112,3 +112,4 @@ websockets==16.1.1
 xlsxwriter==3.2.9
 yarl==1.25.1
 winotify==1.1.0
+edge-tts==7.3.1
