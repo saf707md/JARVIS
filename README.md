@@ -16,7 +16,8 @@ No GPU is needed: the language model runs in the cloud (Google Gemini free tier)
 - Hotkey text actions: select text in any app, press Ctrl+Shift+J, then summarise, explain,
   translate, draft a reply or save it to memory
 - Three-level security model with confirmation prompts
-- Dark desktop interface with status lights and a live activity panel
+- Modern dark interface (CustomTkinter): chat bubbles, system status sidebar, approval cards,
+  routines and reminders at a glance, a Settings window and a live activity panel
 
 ## Architecture
 User -> Interface -> Orchestrator -> Cloud LLM
@@ -64,7 +65,7 @@ memory/     SQLite database and memory manager
 rag/        document loader, chunking, vector store, ingest, retriever
 tools/      calculator, browser, applications, filesystem, system, weather, web_search, screenshot, registry
 security/   permission levels
-ui/         Tkinter interface
+ui/         CustomTkinter interface, hotkey
 knowledge/  your documents      notes/  notes JARVIS creates      logs/  jarvis.log
 
 ## Adding a new tool
