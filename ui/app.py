@@ -35,6 +35,7 @@ LOG_COLORS = {
     "[UNDO]": AMBER,
     "[SUGGEST]": "#c792ea",
     "[REMINDER]": AMBER,
+    "[HOTKEY]": CYAN,
 }
 
 REMINDER_CHECK_MS = 15 * 1000  # look for due reminders every 15 seconds
@@ -63,6 +64,8 @@ class JarvisApp:
         self.indicators = {}
         self.offered = set()  # suggestions already shown this session
         self.wake = None       # "Hey JARVIS" listener, if available
+        self.hotkey = None     # Ctrl+Shift+J text actions, if available
+        self.text_menu = None
 
         self._build_ui()
         self._setup_logging()
@@ -259,6 +262,7 @@ class JarvisApp:
 
         if voice_ok:
             self.events.put(("status", "VOICE", self._start_wake_word(log), GREEN))
+        self._start_hotkey(log)
 
         # Greet before going idle, so the wake word never hears our own voice
         if self.orchestrator is not None and self.voice_enabled:
@@ -303,6 +307,142 @@ class JarvisApp:
         finally:
             if paused_here and not self.busy and self._wake_ready():
                 self.wake.resume()
+
+    # ---------- hotkey text actions ----------
+    def _start_hotkey(self, log):
+        try:
+            from ui.hotkey import GlobalHotkey
+            hotkey = GlobalHotkey(on_press=lambda: self.events.put(("hotkey",)))
+            if hotkey.start():
+                self.hotkey = hotkey
+        except Exception as error:
+            log.warning("[HOTKEY] Text actions unavailable: %s", error)
+
+    def _on_hotkey(self):
+        """Window thread: the hotkey was pressed in some app."""
+        log = logging.getLogger("jarvis")
+        if self.busy or self.orchestrator is None:
+            from core.notify import notify
+            notify("J.A.R.V.I.S", "I'm busy right now, Sir. Try again in a moment.")
+            return
+        if self.text_menu is not None:
+            self._close_text_menu()
+        try:
+            previous = self.root.clipboard_get()
+        except tk.TclError:
+            previous = None
+        self.root.clipboard_clear()
+        log.info("[HOTKEY] Copying the selected text")
+        vk = self.hotkey.vk
+
+        def copy_then_report():
+            from ui.hotkey import send_copy
+            send_copy(vk)
+            import time
+            time.sleep(0.3)  # give the app a moment to put its text on the clipboard
+            self.events.put(("hotkey_copied", previous))
+
+        threading.Thread(target=copy_then_report, daemon=True).start()
+
+    def _on_selection_copied(self, previous):
+        try:
+            selected = self.root.clipboard_get()
+        except tk.TclError:
+            selected = ""
+        self.root.clipboard_clear()  # put the user's own clipboard back
+        if previous:
+            self.root.clipboard_append(previous)
+        if not selected.strip():
+            from core.notify import notify
+            notify("J.A.R.V.I.S", f"Select some text first, then press {self.hotkey.name}.")
+            logging.getLogger("jarvis").info("[HOTKEY] No text was selected")
+            return
+        self._show_text_menu(selected)
+
+    def _show_text_menu(self, selected):
+        from core.text_actions import ACTIONS, preview
+        menu = tk.Toplevel(self.root)
+        menu.overrideredirect(True)
+        menu.attributes("-topmost", True)
+        menu.configure(bg=PANEL, highlightthickness=1, highlightbackground=CYAN)
+        tk.Label(menu, text="J.A.R.V.I.S", font=("Consolas", 10, "bold"), fg=CYAN, bg=PANEL).pack(anchor="w", padx=10, pady=(8, 0))
+        tk.Label(menu, text=f"\u201c{preview(selected, 48)}\u201d", font=("Consolas", 9), fg=DIM, bg=PANEL,
+                 wraplength=300, justify="left").pack(anchor="w", padx=10, pady=(2, 6))
+        for number, (key, (label, _)) in enumerate(ACTIONS.items(), 1):
+            tk.Button(menu, text=f"{number}  {label}", anchor="w", font=("Consolas", 11), fg=TEXT, bg=BG,
+                      activebackground=CYAN, activeforeground=BG, relief="flat", padx=10,
+                      command=lambda k=key: self._choose_text_action(k, selected)).pack(fill="x", padx=8, pady=1)
+            menu.bind(str(number), lambda event, k=key: self._choose_text_action(k, selected))
+        tk.Button(menu, text="Esc  Cancel", anchor="w", font=("Consolas", 10), fg=DIM, bg=PANEL, relief="flat",
+                  padx=10, command=self._close_text_menu).pack(fill="x", padx=8, pady=(4, 8))
+        menu.bind("<Escape>", lambda event: self._close_text_menu())
+        menu.update_idletasks()
+        x, y = self.root.winfo_pointerxy()
+        x = min(x + 12, menu.winfo_screenwidth() - menu.winfo_reqwidth() - 8)
+        y = min(y + 12, menu.winfo_screenheight() - menu.winfo_reqheight() - 48)
+        menu.geometry(f"+{x}+{y}")
+        menu.focus_force()
+        self.text_menu = menu
+        menu.after(30000, lambda: self.text_menu is menu and self._close_text_menu())
+
+    def _close_text_menu(self):
+        if self.text_menu is not None:
+            self.text_menu.destroy()
+            self.text_menu = None
+
+    def _choose_text_action(self, key, selected):
+        from core.text_actions import ACTIONS, build_request, preview
+        self._close_text_menu()
+        if self.busy or self.orchestrator is None:
+            return
+        label = ACTIONS[key][0]
+        self._append(self.chat, f"YOU (hotkey): {label} \u2014 \u201c{preview(selected)}\u201d", "user")
+        logging.getLogger("jarvis").info("[HOTKEY] %s (%d characters)", label, len(selected))
+        self._begin_work()
+        self._set_state("THINKING...", AMBER)
+
+        def work():
+            try:
+                reply = self.orchestrator.ask(build_request(key, selected))
+            except Exception as error:
+                logging.getLogger("jarvis").error("[HOTKEY] %s failed: %s", label, error)
+                reply = "Sir, something went wrong with that text action."
+            self.events.put(("reply", reply))
+            self.events.put(("text_result", label, reply))
+            if key == "remember" and self.voice_enabled:
+                self.events.put(("state", "SPEAKING...", CYAN))
+                self._speak(reply)
+            self.events.put(("done",))
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _show_text_result(self, label, reply):
+        window = tk.Toplevel(self.root)
+        window.title(f"J.A.R.V.I.S \u2014 {label}")
+        window.configure(bg=BG)
+        window.attributes("-topmost", True)
+        text = tk.Text(window, wrap="word", bg=PANEL, fg=TEXT, font=("Consolas", 11), relief="flat",
+                       padx=10, pady=8, width=60, height=min(18, max(5, reply.count("\n") + len(reply) // 60 + 2)))
+        text.insert("1.0", reply)
+        text.config(state="disabled")
+        text.pack(fill="both", expand=True, padx=10, pady=(10, 6))
+        row = tk.Frame(window, bg=BG)
+        row.pack(fill="x", padx=10, pady=(0, 10))
+
+        def copy():
+            self.root.clipboard_clear()
+            self.root.clipboard_append(reply)
+            copy_button.config(text="COPIED")
+
+        copy_button = tk.Button(row, text="COPY", font=("Consolas", 10, "bold"), bg=CYAN, fg=BG, relief="flat",
+                                padx=14, command=copy)
+        copy_button.pack(side="left")
+        tk.Button(row, text="CLOSE", font=("Consolas", 10, "bold"), bg=PANEL, fg=TEXT, relief="flat", padx=14,
+                  command=window.destroy).pack(side="left", padx=(8, 0))
+        window.bind("<Escape>", lambda event: window.destroy())
+        x, y = self.root.winfo_pointerxy()
+        window.geometry(f"+{max(0, x - 200)}+{max(0, y - 100)}")
+        window.focus_force()
 
     # ---------- reminders ----------
     def _reminder_tick(self):
@@ -463,10 +603,18 @@ class JarvisApp:
                 elif kind == "quit":
                     if self.wake is not None:
                         self.wake.stop()
+                    if self.hotkey is not None:
+                        self.hotkey.stop()
                     self.root.destroy()
                     return
                 elif kind == "done":
                     self._end_work()
+                elif kind == "hotkey":
+                    self._on_hotkey()
+                elif kind == "hotkey_copied":
+                    self._on_selection_copied(event[1])
+                elif kind == "text_result":
+                    self._show_text_result(event[1], event[2])
                 elif kind == "wake":
                     self._on_wake()
                 elif kind == "reminder":
