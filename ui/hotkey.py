@@ -72,12 +72,18 @@ class GlobalHotkey:
             ctypes.windll.user32.PostThreadMessageW(self._thread_id, WM_QUIT, 0, 0)
 
     def _run(self):
-        from ctypes import wintypes
-        user32 = ctypes.windll.user32
-        self._thread_id = ctypes.windll.kernel32.GetCurrentThreadId()
-        # The hotkey must be registered in the same thread that reads the messages
-        self.ok = bool(user32.RegisterHotKey(None, HOTKEY_ID, self.flags | MOD_NOREPEAT, self.vk))
-        self._ready.set()
+        try:
+            from ctypes import wintypes
+            user32 = ctypes.windll.user32
+            self._thread_id = ctypes.windll.kernel32.GetCurrentThreadId()
+            # The hotkey must be registered in the same thread that reads the messages
+            self.ok = bool(user32.RegisterHotKey(None, HOTKEY_ID, self.flags | MOD_NOREPEAT, self.vk))
+        except Exception as error:  # not on Windows
+            logger.warning("[HOTKEY] Text actions need Windows: %s", error)
+            self.ok = False
+            return
+        finally:
+            self._ready.set()
         if not self.ok:
             logger.warning("[HOTKEY] %s is already used by another program", self.name)
             return
