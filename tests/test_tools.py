@@ -46,3 +46,30 @@ def test_note_never_overwrites(tmp_path, monkeypatch):
     create_note("plan", "first")
     assert create_note("plan", "second").startswith("Error")
     assert (tmp_path / "plan.txt").read_text() == "first"
+
+
+def test_vscode_found_next_to_code_script(tmp_path, monkeypatch):
+    import tools.applications as applications
+    (tmp_path / "bin").mkdir()
+    (tmp_path / "bin" / "code.cmd").write_text("")
+    (tmp_path / "Code.exe").write_text("")
+    monkeypatch.setattr(applications.shutil, "which", lambda name: str(tmp_path / "bin" / "code.cmd"))
+    assert applications.find_vscode() == (tmp_path / "Code.exe").resolve()
+
+
+def test_vscode_found_in_user_install(tmp_path, monkeypatch):
+    import tools.applications as applications
+    exe = tmp_path / "Programs" / "Microsoft VS Code" / "Code.exe"
+    exe.parent.mkdir(parents=True)
+    exe.write_text("")
+    monkeypatch.setattr(applications.shutil, "which", lambda name: None)
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    assert applications.find_vscode() == exe
+
+
+def test_vscode_missing_returns_none(tmp_path, monkeypatch):
+    import tools.applications as applications
+    monkeypatch.setattr(applications.shutil, "which", lambda name: None)
+    for variable in ("LOCALAPPDATA", "ProgramFiles", "ProgramFiles(x86)"):
+        monkeypatch.setenv(variable, str(tmp_path))
+    assert applications.find_vscode() is None
