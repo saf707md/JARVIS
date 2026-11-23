@@ -18,6 +18,7 @@ from tools.routines import (
 from core import actions
 from core.actions import describe_plan, describe_undo, propose_plan, undo_last_action
 from core.suggestions import suggest_routines
+from tools.reminders import cancel_reminder, describe_cancel, list_reminders, set_reminder
 from tools.web_search import news_search, web_search
 
 logger = logging.getLogger("jarvis")
@@ -55,6 +56,10 @@ _TOOLS = {
     # Plan-and-approve and undo
     "propose_plan": (propose_plan, 2),
     "undo_last_action": (undo_last_action, 2),
+    # Reminders
+    "set_reminder": (set_reminder, 1),
+    "list_reminders": (list_reminders, 1),
+    "cancel_reminder": (cancel_reminder, 2),
 }
 
 # How to describe Level 2 actions to the user when asking permission
@@ -65,6 +70,7 @@ _DESCRIPTIONS = {
     "delete_routine": lambda a: f"delete the '{a.get('name', '')}' routine",
     "propose_plan": describe_plan,
     "undo_last_action": lambda a: describe_undo(),
+    "cancel_reminder": lambda a: describe_cancel(a.get("keyword", "")),
 }
 
 

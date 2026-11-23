@@ -30,7 +30,7 @@ PROCESS_NAMES = {
     "ms-settings:": "SystemSettings.exe",
 }
 USAGE_TOOLS = {"open_application", "open_website", "open_folder", "search_on_site"}
-LOGGED_TOOLS = USAGE_TOOLS | {"create_note", "remember_fact", "run_routine"}
+LOGGED_TOOLS = USAGE_TOOLS | {"create_note", "remember_fact", "run_routine", "set_reminder"}
 
 _state = {"batch": uuid.uuid4().hex, "in_routine": 0}
 
@@ -75,6 +75,9 @@ def _undo_info(tool: str, args: dict, result: str, context: dict):
         return {"type": "close_app", "process": context["process"], "label": args.get("app_name")}
     if tool == "create_note" and result.startswith("Note created: "):
         return {"type": "recycle_note", "path": result[len("Note created: "):].strip()}
+    if tool == "set_reminder" and result.startswith("Reminder #"):
+        return {"type": "cancel_reminder", "id": int(result[len("Reminder #"):].split(" ", 1)[0]),
+                "label": args.get("text", "")}
     if tool == "remember_fact" and result.startswith("Remembered: "):
         return {"type": "forget_fact", "fact": result[len("Remembered: "):].strip()}
     return None
@@ -163,12 +166,16 @@ def _perform(undo: dict) -> str:
             connection.execute("DELETE FROM memories WHERE fact = ?", (undo["fact"],))
             connection.commit()
         return f"forgot '{undo['fact']}'"
+    if kind == "cancel_reminder":
+        from tools.reminders import delete_reminder
+        delete_reminder(undo["id"])
+        return f"cancelled the reminder '{undo['label']}'"
     return "skipped an unknown action"
 
 
 def undo_last_action() -> str:
     """Undo the user's most recent request: close apps JARVIS opened, move notes it created
-    to a recycle folder, and remove facts it just remembered. The user must confirm first.
+    to a recycle folder, remove facts it just remembered and cancel reminders it just set. The user must confirm first.
 
     Use this when the user says "undo", "undo that", "reverse that" or "take that back".
     """

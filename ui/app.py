@@ -34,7 +34,10 @@ LOG_COLORS = {
     "[ROUTINE]": GREEN,
     "[UNDO]": AMBER,
     "[SUGGEST]": "#c792ea",
+    "[REMINDER]": AMBER,
 }
+
+REMINDER_CHECK_MS = 15 * 1000  # look for due reminders every 15 seconds
 
 SUGGEST_EVERY_MS = 20 * 60 * 1000  # look for new habits every 20 minutes
 
@@ -66,6 +69,7 @@ class JarvisApp:
         self._set_state("STARTING...", AMBER)
         self.root.after(100, self._poll_events)
         self.root.after(SUGGEST_EVERY_MS, self._suggest_tick)
+        self.root.after(3000, self._reminder_tick)
         threading.Thread(target=self._startup, daemon=True).start()
 
     # ---------- building the window ----------
@@ -234,6 +238,32 @@ class JarvisApp:
             self._speak("J.A.R.V.I.S online. At your service, Sir.")
         self._check_suggestions()
 
+    # ---------- reminders ----------
+    def _reminder_tick(self):
+        """Runs in the window thread; the database check runs in a worker thread."""
+        threading.Thread(target=self._check_reminders, daemon=True).start()
+        self.root.after(REMINDER_CHECK_MS, self._reminder_tick)
+
+    def _check_reminders(self):
+        try:
+            from tools.reminders import pop_due_reminders
+            due = pop_due_reminders()
+        except Exception as error:
+            logging.getLogger("jarvis").error("[REMINDER] Error: %s", error)
+            return
+        for text, due_at, missed in due:
+            when = due_at.strftime("%I:%M %p").lstrip("0").lower()
+            message = f"Missed reminder from {when}: {text}" if missed else f"Reminder: {text}"
+            logging.getLogger("jarvis").info("[REMINDER] %s", message)
+            self.events.put(("reminder", message))
+
+    def _announce_reminder(self, message):
+        from core.notify import notify
+        notify("J.A.R.V.I.S reminder", message)
+        self._append(self.chat, f"JARVIS: Sir, {message[0].lower() + message[1:]}", "jarvis")
+        if self.voice_enabled:
+            threading.Thread(target=self._speak, args=(f"Sir, {message}",), daemon=True).start()
+
     # ---------- proactive routine suggestions ----------
     def _check_suggestions(self):
         """Runs in a background thread. Offers at most one suggestion per check."""
@@ -369,6 +399,8 @@ class JarvisApp:
                     return
                 elif kind == "done":
                     self._end_work()
+                elif kind == "reminder":
+                    self._announce_reminder(event[1])
                 elif kind == "suggest":
                     self._handle_suggestion(event[1], event[2])
                 elif kind == "confirm":
